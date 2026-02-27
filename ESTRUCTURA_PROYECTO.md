@@ -1,4 +1,4 @@
-Patrón arquitectónico moderno y robusto basado en **Next.js (App Router)** combinado con una arquitectura enfocada en **Feature-Sliced Design (Diseño basado en Funcionalidades)** o Domain-Driven Design (DDD).
+Estás utilizando un patrón arquitectónico moderno y robusto basado en **Next.js (App Router)** combinado con una arquitectura enfocada en **Feature-Sliced Design (Diseño basado en Funcionalidades)** o Domain-Driven Design (DDD).
 
 En lugar de tener carpetas globales gigantes para componentes, hooks y servicios, estás agrupando tu código por "dominio" o funcionalidad dentro de la carpeta `features/`.
 
@@ -121,3 +121,112 @@ features/reports/
 - **Server Actions:** Las carpetas `actions/` te permiten hacer mutaciones seguras sin necesidad de crear endpoints tradicionales de API de forma manual.
 - **Validaciones fuertemente tipadas:** Al tener `validations/` y `types/` juntos, garantizas que lo que envía el formulario (`components/`) pase por una comprobación estricta antes de llegar a `actions/`.
 - **Mappers:** Usas mappers para adaptar las respuestas del backend (Data Transfer Objects - DTOs) a lo que los componentes esperan consumir, aislando al frontend de cambios en la base de datos.
+
+---
+
+## 4. Ejemplos Prácticos (Servicios vs Acciones)
+
+La regla general en esta arquitectura es:
+
+- **Services (`reports-service.ts`):** Operaciones de **lectura** (GET). Traen datos de la base de datos o APIs externas para mostrarlos en la UI.
+- **Actions (`reports-actions.ts`):** Operaciones de **escritura/mutación** (POST, PUT, DELETE). Reciben datos del cliente, los validan y modifican el estado del servidor.
+
+### 4.1 Ejemplo de Servicio (`services/reports-service.ts`)
+
+El servicio se enfoca en consultar datos de forma segura (típicamente usado en _Server Components_).
+
+```typescript
+import { db } from "@/lib/db" // Instancia de tu ORM
+import { Report } from "../types/reports"
+
+/**
+ * Obtiene la lista de todos los reportes paginados (SOLO LECTURA).
+ */
+export async function getReports(
+  page = 1,
+  limit = 10,
+): Promise<{ data: Report[]; total: number }> {
+  try {
+    const [reports, total] = await Promise.all([
+      db.report.findMany({
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      db.report.count(),
+    ])
+
+    return { data: reports as Report[], total }
+  } catch (error) {
+    console.error("Error fetching reports:", error)
+    throw new Error("No se pudieron cargar los reportes")
+  }
+}
+
+export async function getReportById(id: string): Promise<Report | null> {
+  const report = await db.report.findUnique({ where: { id } })
+  return report as Report | null
+}
+```
+
+### 4.2 Ejemplo de Acción (`actions/reports-actions.ts`)
+
+Las acciones llevan `"use server"`. Son llamadas directamente por componentes de cliente interactivos (formularios, botones) para transformar o insertar datos.
+
+```typescript
+"use server"
+
+import { revalidatePath } from "next/cache"
+import { db } from "@/lib/db"
+import {
+  createReportSchema,
+  CreateReportInput,
+} from "../validations/reports-schema"
+
+export type ActionResponse = {
+  success: boolean
+  message: string
+  errors?: Record<string, string[]>
+}
+
+/**
+ * Crea un nuevo reporte en la base de datos (MUTACIÓN/ESCRITURA).
+ */
+export async function createReportAction(
+  data: CreateReportInput,
+): Promise<ActionResponse> {
+  try {
+    // 1. Validar los datos de entrada
+    const validatedData = createReportSchema.safeParse(data)
+    if (!validatedData.success) {
+      return {
+        success: false,
+        message: "Error de validación",
+        errors: validatedData.error.flatten().fieldErrors,
+      }
+    }
+
+    // 2. Insertar en la Base de Datos
+    await db.report.create({
+      data: {
+        title: validatedData.data.title,
+        description: validatedData.data.description,
+      },
+    })
+
+    // 3. Invalidar la caché de Next.js
+    revalidatePath("/dashboard/reportes")
+
+    return {
+      success: true,
+      message: "Reporte creado exitosamente",
+    }
+  } catch (error) {
+    console.error("Error al crear reporte:", error)
+    return {
+      success: false,
+      message: "Ocurrió un error inesperado al guardar el reporte.",
+    }
+  }
+}
+```
