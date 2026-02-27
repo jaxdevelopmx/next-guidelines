@@ -1,4 +1,4 @@
-Estás utilizando un patrón arquitectónico moderno y robusto basado en **Next.js (App Router)** combinado con una arquitectura enfocada en **Feature-Sliced Design (Diseño basado en Funcionalidades)** o Domain-Driven Design (DDD).
+Patrón arquitectónico moderno y robusto basado en **Next.js (App Router)** combinado con una arquitectura enfocada en **Feature-Sliced Design (Diseño basado en Funcionalidades)** o Domain-Driven Design (DDD).
 
 En lugar de tener carpetas globales gigantes para componentes, hooks y servicios, estás agrupando tu código por "dominio" o funcionalidad dentro de la carpeta `features/`.
 
